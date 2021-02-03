@@ -353,6 +353,8 @@ mod mlvalues;
 mod runtime;
 mod value;
 
+pub mod boxroot;
+
 pub use crate::closure::{OCamlFn1, OCamlFn2, OCamlFn3, OCamlFn4, OCamlFn5};
 pub use crate::conv::{FromOCaml, ToOCaml};
 pub use crate::error::OCamlException;
