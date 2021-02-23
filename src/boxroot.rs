@@ -1,52 +1,68 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
-use ocaml_sys::{caml_register_global_root, caml_remove_global_root};
-use std::{cell::UnsafeCell, marker::PhantomData, ops::Deref};
+use std::{marker::PhantomData, ops::Deref};
 
-use crate::{memory::OCamlCell, OCaml, OCamlRef, OCamlRuntime};
+use ocaml_boxroot_sys::{
+    boxroot_create, boxroot_delete, boxroot_get, boxroot_get_ref, boxroot_modify,
+    BoxRoot as PrimitiveBoxRoot,
+};
 
-pub struct BoxRoot<T: 'static>(Box<UnsafeCell<OCaml<'static, T>>>);
+use crate::{memory::OCamlCell, OCaml, OCamlRef, OCamlRuntime, RawOCaml};
+
+pub struct BoxRoot<T: 'static> {
+    boxroot: PrimitiveBoxRoot,
+    _marker: PhantomData<T>,
+}
 
 impl<T> BoxRoot<T> {
-    pub fn new<'a>(v: OCaml<'a, T>) -> BoxRoot<T> {
-        BoxRoot(unsafe {
-            let r = Box::new(UnsafeCell::new(OCaml {
-                raw: v.raw,
-                _marker: PhantomData,
-            }));
-
-            // Immediate values don't need to be registered
-            if v.is_block() {
-                caml_register_global_root(r.get() as *mut isize);
-            };
-
-            r
-        })
+    /// Creates a new root from an [`OCaml`]`<T>` value.
+    pub fn new<'a>(val: OCaml<'a, T>) -> BoxRoot<T> {
+        BoxRoot {
+            boxroot: unsafe { boxroot_create(val.raw) },
+            _marker: PhantomData,
+        }
     }
 
-    pub fn get<'a>(&self, _cr: &'a OCamlRuntime) -> OCaml<'a, T> {
-        unsafe { *(*self.0).get() }
+    /// Creates a new root from a [`RawOCaml`] value.
+    ///
+    /// # Safety
+    ///
+    /// The type of the value is not validated in any way.
+    pub unsafe fn from_raw(raw: RawOCaml) -> BoxRoot<T> {
+        BoxRoot {
+            boxroot: boxroot_create(raw),
+            _marker: PhantomData,
+        }
     }
 
-    /// Roots an [`OCaml`] value.
+    /// Gets the value stored in this root as an [`OCaml`]`<T>`.
+    pub fn get<'a>(&self, cr: &'a OCamlRuntime) -> OCaml<'a, T> {
+        unsafe { OCaml::new(cr, boxroot_get(self.boxroot)) }
+    }
+
+    /// Gets the value stored in this root as a [`RawOCaml`].
+    ///
+    /// # Safety
+    ///
+    /// The [`RawOCaml`] value obtained may become invalid after the OCaml GC runs,
+    /// and correct usage will not be enforced by the borrow checker.
+    pub unsafe fn get_raw(&self) -> RawOCaml {
+        boxroot_get(self.boxroot)
+    }
+
+    /// Roots the OCaml value `val`, returning an [`OCamlRef`]`<T>`.
     pub fn keep<'tmp>(&'tmp mut self, val: OCaml<T>) -> OCamlRef<'tmp, T> {
         unsafe {
-            let cell = self.0.get();
-            *cell = OCaml {
-                raw: val.raw,
-                _marker: PhantomData,
-            };
-            &*(cell as *const OCamlCell<T>)
+            boxroot_modify(&mut self.boxroot, val.raw);
+            &*(boxroot_get_ref(self.boxroot) as *const OCamlCell<T>)
         }
     }
 }
 
 impl<T> Drop for BoxRoot<T> {
     fn drop(&mut self) {
-        unsafe {
-            caml_remove_global_root(self.0.get() as *mut isize);
-        };
+        unsafe { boxroot_delete(self.boxroot) }
     }
 }
 
@@ -54,7 +70,6 @@ impl<T> Deref for BoxRoot<T> {
     type Target = OCamlCell<T>;
 
     fn deref(&self) -> OCamlRef<T> {
-        let cell: &UnsafeCell<OCaml<'static, T>> = &self.0;
-        unsafe { std::mem::transmute(cell) }
+        unsafe { &*(boxroot_get_ref(self.boxroot) as *const OCamlCell<T>) }
     }
 }

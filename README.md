@@ -9,21 +9,11 @@ _Zinc-iron alloy coating is used in parts that need very good corrosion protecti
 
 **API IS CONSIDERED UNSTABLE AT THE MOMENT AND IS LIKELY TO CHANGE IN THE FUTURE**
 
-[ocaml-interop](https://github.com/simplestaking/ocaml-interop) is an OCaml<->Rust FFI with an emphasis on safety inspired by [caml-oxide](https://github.com/stedolan/caml-oxide) and [ocaml-rs](https://github.com/zshipko/ocaml-rs).
+[ocaml-interop](https://github.com/simplestaking/ocaml-interop) is an OCaml<->Rust FFI with an emphasis on safety inspired by [caml-oxide](https://github.com/stedolan/caml-oxide), [ocaml-rs](https://github.com/zshipko/ocaml-rs) and [CAMLroot](https://arxiv.org/abs/1812.04905).
 
 Read the full documentation [here](https://docs.rs/ocaml-interop/).
 
 Report issues on [Github](https://github.com/simplestaking/ocaml-interop/issues).
-
-## Table of Contents
-
-- [How does it work](#how-does-it-work)
-- [A quick taste](#a-quick-taste)
-- [References and links](#references-and-links)
-
-## How does it work
-
-ocaml-interop, just like [caml-oxide](https://github.com/stedolan/caml-oxide), encodes the invariants of OCaml's garbage collector into the rules of Rust's borrow checker. Any violation of these invariants results in a compilation error produced by Rust's borrow checker.
 
 ## A quick taste
 
@@ -32,7 +22,7 @@ ocaml-interop, just like [caml-oxide](https://github.com/stedolan/caml-oxide), e
 ```rust
 let rust_string = ocaml_string.to_rust();
 // `cr` = OCaml runtime handle
-let new_ocaml_string = to_ocaml!(cr, rust_string);
+let new_ocaml_string = rust_string.to_ocaml(cr);
 ```
 
 ### Convert between Rust and OCaml structs/records
@@ -62,7 +52,7 @@ impl_conv_ocaml_record! {
 // ...
 
 let rust_struct = ocaml_record.to_rust();
-let new_ocaml_record = to_ocaml!(cr, rust_struct);
+let new_ocaml_record = rust_struct.to_ocaml(cr);
 ```
 
 ### Convert between OCaml and Rust variants/enums
@@ -91,7 +81,7 @@ impl_conv_ocaml_variant! {
 // ...
 
 let rust_enum = ocaml_variant.to_rust();
-let new_ocaml_variant = to_ocaml!(cr, rust_enum);
+let new_ocaml_variant = rust_enum.to_ocaml(cr);
 ```
 
 ### Call OCaml functions from Rust
@@ -102,14 +92,15 @@ Callback.register "ocaml_print_endline" print_endline
 ```
 
 ```rust
+// Rust
 ocaml! {
     fn ocaml_print_endline(s: String);
 }
 
 // ...
 
-let ocaml_string = to_ocaml!(cr, "hello OCaml!", root_var);
-ocaml_print_endline(cr, ocaml_string);
+let ocaml_string = "hello OCaml!".to_ocaml_rooted(cr);
+ocaml_print_endline(cr, &ocaml_string);
 ```
 
 ### Call Rust functions from OCaml
@@ -117,10 +108,10 @@ ocaml_print_endline(cr, ocaml_string);
 ```rust
 // Rust
 ocaml_export! {
-    pub fn twice_boxed_int(cr, num: OCaml<OCamlInt64>) -> OCaml<OCamlInt64> {
-        let num = num.to_rust();
+    pub fn twice_boxed_int(cr, num: OCamlRef<OCamlInt64>) -> OCaml<OCamlInt64> {
+        let num = num.to_rust(cr);
         let result = num * 2;
-        to_ocaml!(cf, result)
+        result.to_ocaml(cr)
     }
 }
 ```
@@ -143,3 +134,4 @@ let result = rust_twice_boxed_int 123L in
 - [CAMLroot: revisiting the OCaml FFI](https://arxiv.org/abs/1812.04905).
 - [caml-oxide](https://github.com/stedolan/caml-oxide), the code from that paper.
 - [ocaml-rs](https://github.com/zshipko/ocaml-rs), another OCaml<->Rust FFI library.
+- [ocaml-boxroot](https://gitlab.com/ocaml-rust/ocaml-boxroot)

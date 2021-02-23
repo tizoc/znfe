@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 use ocaml_interop::{
-    ocaml_export, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, to_ocaml,
-    OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlInt32, OCamlInt64, OCamlList, OCamlRef,
-    ToOCaml,
+    ocaml_export, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, OCaml, OCamlBytes,
+    OCamlFloat, OCamlInt, OCamlInt32, OCamlInt64, OCamlList, OCamlRef, ToOCaml,
 };
 use std::{thread, time};
 
@@ -90,13 +89,13 @@ ocaml_export! {
     fn rust_make_ok(cr, value: OCamlRef<OCamlInt>) -> OCaml<Result<OCamlInt, String>> {
         let value: i64 = value.to_rust(cr);
         let ok_value: Result<i64, String> = Ok(value);
-        to_ocaml!(cr, ok_value)
+        ok_value.to_ocaml(cr)
     }
 
     fn rust_make_error(cr, value: OCamlRef<String>) -> OCaml<Result<OCamlInt, String>> {
         let value: String = value.to_rust(cr);
         let error_value: Result<i64, String> = Err(value);
-        to_ocaml!(cr, error_value)
+        error_value.to_ocaml(cr)
     }
 
     fn rust_sleep_releasing(cr, millis: OCamlRef<OCamlInt>) {
@@ -126,7 +125,7 @@ ocaml_export! {
             Ok(Movement::RotateLeft) => "RotateLeft".to_owned(),
             Ok(Movement::RotateRight) => "RotateRight".to_owned(),
         };
-        to_ocaml!(cr, s)
+        s.to_ocaml(cr)
     }
 
     fn rust_string_of_polymorphic_movement(cr, polymorphic_movement: OCamlRef<PolymorphicMovement>) -> OCaml<String> {
@@ -144,6 +143,6 @@ ocaml_export! {
             Ok(PolymorphicMovement::RotateLeft) => "`RotateLeft".to_owned(),
             Ok(PolymorphicMovement::RotateRight) => "`RotateRight".to_owned(),
         };
-        to_ocaml!(cr, s)
+        s.to_ocaml(cr)
     }
 }

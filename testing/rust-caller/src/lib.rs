@@ -3,7 +3,7 @@
 
 extern crate ocaml_interop;
 
-use ocaml_interop::{ocaml_frame, to_ocaml, OCaml, OCamlBytes, OCamlRuntime, ToOCaml};
+use ocaml_interop::{OCaml, OCamlBytes, OCamlRuntime, ToOCaml};
 
 mod ocaml {
     use ocaml_interop::{
@@ -62,81 +62,67 @@ mod ocaml {
 }
 
 pub fn increment_bytes(cr: &mut OCamlRuntime, bytes: &str, first_n: usize) -> String {
-    ocaml_frame!(cr, (bytes_root), {
-        let bytes = to_ocaml!(cr, bytes, bytes_root);
-        let first_n = unsafe { OCaml::of_i64_unchecked(first_n as i64) };
-        let result = ocaml::increment_bytes(cr, bytes, &first_n);
-        result.to_rust()
-    })
+    let bytes = bytes.to_ocaml_rooted(cr);
+    let first_n = unsafe { OCaml::of_i64_unchecked(first_n as i64) };
+    let result = ocaml::increment_bytes(cr, &bytes, &first_n);
+    result.to_rust(cr)
 }
 
 pub fn increment_ints_list(cr: &mut OCamlRuntime, ints: &Vec<i64>) -> Vec<i64> {
-    ocaml_frame!(cr, (root), {
-        let ints = to_ocaml!(cr, ints, root);
-        let result = ocaml::increment_ints_list(cr, ints);
-        result.to_rust()
-    })
+    let ints = ints.to_ocaml_rooted(cr);
+    let result = ocaml::increment_ints_list(cr, &ints);
+    result.to_rust(cr)
 }
 
 pub fn twice(cr: &mut OCamlRuntime, num: i64) -> i64 {
     let num = unsafe { OCaml::of_i64_unchecked(num) };
     let result = ocaml::twice(cr, &num);
-    result.to_rust()
+    result.to_rust(cr)
 }
 
 pub fn make_tuple(cr: &mut OCamlRuntime, fst: String, snd: i64) -> (String, i64) {
-    ocaml_frame!(cr, (str_root), {
-        let num = unsafe { OCaml::of_i64_unchecked(snd) };
-        let str = to_ocaml!(cr, fst, str_root);
-        let result = ocaml::make_tuple(cr, str, &num);
-        result.to_rust()
-    })
+    let num = unsafe { OCaml::of_i64_unchecked(snd) };
+    let str = fst.to_ocaml_rooted(cr);
+    let result = ocaml::make_tuple(cr, &str, &num);
+    result.to_rust(cr)
 }
 
 pub fn make_some(cr: &mut OCamlRuntime, value: String) -> Option<String> {
-    ocaml_frame!(cr, (root), {
-        let str = to_ocaml!(cr, value, root);
-        let result = ocaml::make_some(cr, str);
-        result.to_rust()
-    })
+    let str = value.to_ocaml_rooted(cr);
+    let result = ocaml::make_some(cr, &str);
+    result.to_rust(cr)
 }
 
 pub fn make_ok(cr: &mut OCamlRuntime, value: i64) -> Result<i64, String> {
     let value = unsafe { OCaml::of_i64_unchecked(value) };
     let result = ocaml::make_ok(cr, &value);
-    result.to_rust()
+    result.to_rust(cr)
 }
 
 pub fn make_error(cr: &mut OCamlRuntime, value: String) -> Result<i64, String> {
-    ocaml_frame!(cr, (root), {
-        let result = to_ocaml!(cr, value, root);
-        let result = ocaml::make_error(cr, result);
-        result.to_rust()
-    })
+    let result = value.to_ocaml_rooted(cr);
+    let result = ocaml::make_error(cr, &result);
+    result.to_rust(cr)
 }
 
 pub fn verify_record_test(cr: &mut OCamlRuntime, record: ocaml::TestRecord) -> String {
-    ocaml_frame!(cr, (root), {
-        let ocaml_record = to_ocaml!(cr, record, root);
-        let result = ocaml::stringify_record(cr, ocaml_record);
-        result.to_rust()
-    })
+    let ocaml_record = record.to_ocaml_rooted(cr);
+    let result = ocaml::stringify_record(cr, &ocaml_record);
+    result.to_rust(cr)
 }
 
 pub fn verify_variant_test(cr: &mut OCamlRuntime, variant: ocaml::Movement) -> String {
-    ocaml_frame!(cr, (root), {
-        let ocaml_variant = to_ocaml!(cr, variant, root);
-        let result = ocaml::stringify_variant(cr, ocaml_variant);
-        result.to_rust()
-    })
+    let ocaml_variant = variant.to_ocaml_rooted(cr);
+    let result = ocaml::stringify_variant(cr, &ocaml_variant);
+    result.to_rust(cr)
 }
 
 pub fn allocate_alot(cr: &mut OCamlRuntime) -> bool {
     let vec = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     for _n in 1..50000 {
-        let _x: OCaml<OCamlBytes> = to_ocaml!(cr, vec);
-        let _y: OCaml<OCamlBytes> = to_ocaml!(cr, vec);
-        let _z: OCaml<OCamlBytes> = to_ocaml!(cr, vec);
+        let _x: OCaml<OCamlBytes> = vec.to_ocaml(cr);
+        let _y: OCaml<OCamlBytes> = vec.to_ocaml(cr);
+        let _z: OCaml<OCamlBytes> = vec.to_ocaml(cr);
         ()
     }
     true
@@ -255,7 +241,6 @@ fn test_variant_conversion() {
     );
 }
 
-
 #[test]
 #[serial]
 fn test_exception_handling_with_message() {
@@ -263,13 +248,14 @@ fn test_exception_handling_with_message() {
     let result = std::panic::catch_unwind(move || {
         let mut cr = unsafe { OCamlRuntime::recover_handle() };
         let mcr = &mut cr;
-        ocaml_frame!(mcr, (message_root), {
-            let message = to_ocaml!(mcr, "my-error-message", message_root);
-            ocaml::raises_message_exception(mcr, message);
-        });
+        let message = "my-error-message".to_ocaml_rooted(mcr);
+        ocaml::raises_message_exception(mcr, &message);
     });
     assert_eq!(
-        result.err().and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone())).unwrap(),
+        result
+            .err()
+            .and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone()))
+            .unwrap(),
         "OCaml exception, message: Some(\"my-error-message\")"
     );
 }
@@ -283,7 +269,10 @@ fn test_exception_handling_without_message() {
         ocaml::raises_nonmessage_exception(cr, &OCaml::unit());
     });
     assert_eq!(
-        result.err().and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone())).unwrap(),
+        result
+            .err()
+            .and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone()))
+            .unwrap(),
         "OCaml exception, message: None"
     );
 }
@@ -297,7 +286,10 @@ fn test_exception_handling_nonblock_exception() {
         ocaml::raises_nonblock_exception(cr, &OCaml::unit());
     });
     assert_eq!(
-        result.err().and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone())).unwrap(),
+        result
+            .err()
+            .and_then(|err| Some(err.downcast_ref::<String>().unwrap().clone()))
+            .unwrap(),
         "OCaml exception, message: None"
     );
 }

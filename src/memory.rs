@@ -3,11 +3,11 @@
 
 use crate::{
     conv::FromOCaml,
-    mlvalues::{tag, Intnat, OCamlBytes, OCamlFloat, OCamlInt32, OCamlInt64, OCamlList, RawOCaml},
+    mlvalues::{tag, OCamlBytes, OCamlFloat, OCamlInt32, OCamlInt64, OCamlList, RawOCaml},
     runtime::OCamlRuntime,
     value::OCaml,
 };
-use core::{cell::UnsafeCell, marker::PhantomData, ptr};
+use core::{cell::UnsafeCell, marker::PhantomData};
 pub use ocaml_sys::{
     caml_alloc, local_roots as ocaml_sys_local_roots, set_local_roots as ocaml_sys_set_local_roots,
     store_field,
@@ -16,111 +16,6 @@ use ocaml_sys::{
     caml_alloc_string, caml_alloc_tuple, caml_copy_double, caml_copy_int32, caml_copy_int64,
     string_val,
 };
-
-// Structure representing a block in the list of OCaml's GC local roots.
-#[repr(C)]
-struct CamlRootsBlock {
-    next: *mut CamlRootsBlock,
-    ntables: Intnat,
-    nitems: Intnat,
-    local_roots: *mut RawOCaml,
-    // NOTE: in C this field is defined instead, but we only need a single pointer
-    // tables: [*mut RawOCaml; 5],
-}
-
-impl Default for CamlRootsBlock {
-    fn default() -> Self {
-        CamlRootsBlock {
-            next: ptr::null_mut(),
-            ntables: 0,
-            nitems: 0,
-            local_roots: ptr::null_mut(),
-            // NOTE: to mirror C's definition this would be
-            // tables: [ptr::null_mut(); 5],
-        }
-    }
-}
-
-// Overrides for ocaml-sys functions of the same name but using ocaml-interop's CamlRootBlocks representation.
-unsafe fn local_roots() -> *mut CamlRootsBlock {
-    ocaml_sys_local_roots() as *mut CamlRootsBlock
-}
-
-unsafe fn set_local_roots(roots: *mut CamlRootsBlock) {
-    ocaml_sys_set_local_roots(roots as *mut ocaml_sys::CamlRootsBlock)
-}
-
-// OCaml GC frame handle
-#[derive(Default)]
-pub struct GCFrame<'gc> {
-    _marker: PhantomData<&'gc i32>,
-    block: CamlRootsBlock,
-}
-
-// Impl
-
-impl<'gc> GCFrame<'gc> {
-    #[doc(hidden)]
-    pub fn initialize(&mut self, frame_local_roots: &[UnsafeCell<RawOCaml>]) -> &mut Self {
-        self.block.local_roots = frame_local_roots[0].get();
-        self.block.ntables = 1;
-        unsafe {
-            self.block.next = local_roots();
-            set_local_roots(&mut self.block);
-        };
-        self
-    }
-}
-
-impl<'gc> Drop for GCFrame<'gc> {
-    fn drop(&mut self) {
-        unsafe {
-            assert!(
-                local_roots() == &mut self.block,
-                "OCaml local roots corrupted"
-            );
-            set_local_roots(self.block.next);
-        }
-    }
-}
-
-pub struct OCamlRawRoot<'a> {
-    cell: &'a UnsafeCell<RawOCaml>,
-}
-
-impl<'a> OCamlRawRoot<'a> {
-    #[doc(hidden)]
-    pub unsafe fn reserve<'gc>(_gc: &GCFrame<'gc>) -> OCamlRawRoot<'gc> {
-        assert_eq!(&_gc.block as *const _, local_roots());
-        let block = &mut *local_roots();
-        let locals: *const UnsafeCell<RawOCaml> =
-            &*(block.local_roots as *const UnsafeCell<RawOCaml>);
-        let cell = &*locals.offset(block.nitems);
-        block.nitems += 1;
-        OCamlRawRoot { cell }
-    }
-
-    /// Roots an [`OCaml`] value.
-    pub fn keep<'tmp, T>(&'tmp mut self, val: OCaml<T>) -> OCamlRef<'tmp, T> {
-        unsafe {
-            let cell = self.cell.get();
-            *cell = val.raw();
-            &*(cell as *const OCamlCell<T>)
-        }
-    }
-
-    /// Roots a [`RawOCaml`] value and attaches a type to it.
-    ///
-    /// # Safety
-    ///
-    /// This method is unsafe because there is no way to validate that the [`RawOCaml`] value
-    /// is of the correct type.
-    pub unsafe fn keep_raw<T>(&mut self, val: RawOCaml) -> OCamlRef<T> {
-        let cell = self.cell.get();
-        *cell = val;
-        &*(cell as *const OCamlCell<T>)
-    }
-}
 
 pub struct OCamlCell<T> {
     cell: UnsafeCell<RawOCaml>,
@@ -152,7 +47,7 @@ impl<T> OCamlCell<T> {
     ///
     /// # Safety
     ///
-    /// This method is unsafe, because the RawOCaml value obtained will not be tracked.
+    /// The [`RawOCaml`] value obtained may become invalid after the OCaml GC runs.
     pub unsafe fn get_raw(&self) -> RawOCaml {
         *self.cell.get()
     }
@@ -194,7 +89,10 @@ pub fn alloc_double(cr: &mut OCamlRuntime, d: f64) -> OCaml<OCamlFloat> {
 // small values (like tuples and conses are) without going through `caml_modify` to get
 // a little bit of extra performance.
 
-pub fn alloc_some<'a, A>(cr: &'a mut OCamlRuntime, value: OCamlRef<A>) -> OCaml<'a, Option<A>> {
+pub fn alloc_some<'a, 'b, A>(
+    cr: &'a mut OCamlRuntime,
+    value: OCamlRef<'b, A>,
+) -> OCaml<'a, Option<A>> {
     unsafe {
         let ocaml_some = caml_alloc(1, tag::SOME);
         store_field(ocaml_some, 0, value.get_raw());
@@ -202,10 +100,10 @@ pub fn alloc_some<'a, A>(cr: &'a mut OCamlRuntime, value: OCamlRef<A>) -> OCaml<
     }
 }
 
-pub fn alloc_tuple<'a, F, S>(
+pub fn alloc_tuple<'a, 'b, F, S>(
     cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<F>,
-    snd: OCamlRef<S>,
+    fst: OCamlRef<'b, F>,
+    snd: OCamlRef<'b, S>,
 ) -> OCaml<'a, (F, S)> {
     unsafe {
         let ocaml_tuple = caml_alloc_tuple(2);
@@ -215,11 +113,11 @@ pub fn alloc_tuple<'a, F, S>(
     }
 }
 
-pub fn alloc_tuple_3<'a, F, S, T3>(
+pub fn alloc_tuple_3<'a, 'b, F, S, T3>(
     cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<F>,
-    snd: OCamlRef<S>,
-    elt3: OCamlRef<T3>,
+    fst: OCamlRef<'b, F>,
+    snd: OCamlRef<'b, S>,
+    elt3: OCamlRef<'b, T3>,
 ) -> OCaml<'a, (F, S, T3)> {
     unsafe {
         let ocaml_tuple = caml_alloc_tuple(3);
@@ -230,12 +128,12 @@ pub fn alloc_tuple_3<'a, F, S, T3>(
     }
 }
 
-pub fn alloc_tuple_4<'a, F, S, T3, T4>(
+pub fn alloc_tuple_4<'a, 'b, F, S, T3, T4>(
     cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<F>,
-    snd: OCamlRef<S>,
-    elt3: OCamlRef<T3>,
-    elt4: OCamlRef<T4>,
+    fst: OCamlRef<'b, F>,
+    snd: OCamlRef<'b, S>,
+    elt3: OCamlRef<'b, T3>,
+    elt4: OCamlRef<'b, T4>,
 ) -> OCaml<'a, (F, S, T3, T4)> {
     unsafe {
         let ocaml_tuple = caml_alloc_tuple(4);
@@ -247,10 +145,10 @@ pub fn alloc_tuple_4<'a, F, S, T3, T4>(
     }
 }
 
-pub fn alloc_cons<'a, A>(
+pub fn alloc_cons<'a, 'b, A>(
     cr: &'a mut OCamlRuntime,
-    head: OCamlRef<A>,
-    tail: OCamlRef<OCamlList<A>>,
+    head: OCamlRef<'b, A>,
+    tail: OCamlRef<'b, OCamlList<A>>,
 ) -> OCaml<'a, OCamlList<A>> {
     unsafe {
         let ocaml_cons = caml_alloc(2, tag::CONS);

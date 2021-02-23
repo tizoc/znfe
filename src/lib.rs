@@ -65,7 +65,7 @@
 //! # let arg1 = "arg1";
 //! # let cr = unsafe { &mut OCamlRuntime::recover_handle() };
 //! let escape = ocaml_frame!(cr, (arg1_root), {
-//!     let arg1 = arg1.to_ocaml(cr);
+//!     let arg1 = arg1.to_ocaml_rooted(cr);
 //!     let arg1_root = arg1_root.keep(arg1);
 //!     let result = ocaml_function(cr, arg1_root, /* ..., argN */);
 //!     let s: String = result.to_rust();
@@ -84,7 +84,7 @@
 //!    |  _____------___^
 //!    | |     |
 //!    | |     borrow later stored here
-//!    | |     let arg1 = arg1.to_ocaml(cr);
+//!    | |     let arg1 = arg1.to_ocaml_rooted(cr);
 //!    | |     let arg1_root = arg1_root.keep(arg1);
 //!    | |     let result = ocaml_function(cr, arg1_root, /* ..., argN */);
 //! ...  |
@@ -164,7 +164,7 @@
 //!
 //! ```rust,no_run
 //! use ocaml_interop::{
-//!     ocaml_frame, to_ocaml, FromOCaml, OCaml, OCamlRef, ToOCaml, OCamlRuntime
+//!     BoxRoot, FromOCaml, OCaml, OCamlRef, ToOCaml, OCamlRuntime
 //! };
 //!
 //! // To call an OCaml function, it first has to be declared inside an `ocaml!` macro block:
@@ -194,77 +194,53 @@
 //!     // The first argument to the macro is a reference to an `OCamlRuntime`, followed by a
 //!     // list of "root variables" (more on this later). The last argument
 //!     // is the block of code that will run inside that frame.
-//!     ocaml_frame!(cr, (bytes1_root, bytes2_root), {
-//!         // The `ToOCaml` trait provides the `to_ocaml` method to convert Rust
-//!         // values into OCaml values.
-//!         let ocaml_bytes1: OCaml<String> = bytes1.to_ocaml(cr);
+//!     // The `ToOCaml` trait provides the `to_ocaml` method to convert Rust
+//!     // values into OCaml values.
+//!     let ocaml_bytes1: BoxRoot<String> = bytes1.to_ocaml_rooted(cr);
 //!
-//!         // `ocaml_bytes1` is going to be referenced later, but there calls into the
-//!         // OCaml runtime that perform allocations happening before this value is used again.
-//!         // Those calls into the OCaml runtime invalidate this reference, so it has to be
-//!         // kept alive somehow. To do so, `bytes1_root.keep(ocaml_bytes1)` is used.
-//!         // `bytes1_root` is one of the "root variables" that were declared when opening
-//!         // this frame.
-//!         // Each "root variable" reserves space for a reference that will be tracked by the GC.
-//!         // A root variable's `root_var.keep(value)` method returns
-//!         // an value-containing root that is going to be valid during the scope of
-//!         // the current `ocaml_frame!` block. Later `cr.get(value_root)` can be used
-//!         // to recover the original OCaml value.
-//!         let bytes1_root: OCamlRef<String> = bytes1_root.keep(ocaml_bytes1);
+//!     // Same as above. Here the convenience macro [`to_ocaml!`] is used.
+//!     // It works like `value.to_ocaml_rooted(cr)`, but has an optional third argument that
+//!     // can be a root variable to perform the rooting.
+//!     // This variation returns an `OCamlRef` value instead of an `OCaml` one.
+//!     let bytes2_root = bytes2.to_ocaml_rooted(cr);
 //!
-//!         // Same as above. Here the convenience macro [`to_ocaml!`] is used.
-//!         // It works like `value.to_ocaml(cr)`, but has an optional third argument that
-//!         // can be a root variable to perform the rooting.
-//!         // This variation returns an `OCamlRef` value instead of an `OCaml` one.
-//!         let bytes2_root = to_ocaml!(cr, bytes2, bytes2_root);
+//!     // Rust `i64` integers can be converted into OCaml fixnums with `OCaml::of_i64`
+//!     // and `OCaml::of_i64_unchecked`.
+//!     // Such conversion doesn't require any allocation on the OCaml side, and doesn't
+//!     // invalidate other `OCaml<T>` values.
+//!     let ocaml_first_n = unsafe { OCaml::of_i64_unchecked(first_n as i64) };
 //!
-//!         // Rust `i64` integers can be converted into OCaml fixnums with `OCaml::of_i64`
-//!         // and `OCaml::of_i64_unchecked`.
-//!         // Such conversion doesn't require any allocation on the OCaml side, and doesn't
-//!         // invalidate other `OCaml<T>` values.
-//!         let ocaml_first_n = unsafe { OCaml::of_i64_unchecked(first_n as i64) };
+//!     // Any OCaml function (declared above in a `ocaml!` block) can be called as a regular
+//!     // Rust function, by passing a `&mut OCamlRuntime` as the first argument, followed by
+//!     // the rest of the arguments declared for that function.
+//!     // Arguments to these functions must be references to roots: `OCamlRef<T>`
+//!     let result1 = ocaml_funcs::increment_bytes(
+//!         cr,             // &mut OCamlRuntime
+//!         &ocaml_bytes1,    // OCamlRef<String>
+//!         // Immediate OCaml values, such as ints and books have an as_value_ref() method
+//!         // that can be used to simulate rooting.
+//!         &ocaml_first_n, // OCamlRef<OCamlInt>
+//!     );
 //!
-//!         // Any OCaml function (declared above in a `ocaml!` block) can be called as a regular
-//!         // Rust function, by passing a `&mut OCamlRuntime` as the first argument, followed by
-//!         // the rest of the arguments declared for that function.
-//!         // Arguments to these functions must be references to roots: `OCamlRef<T>`
-//!         let result1 = ocaml_funcs::increment_bytes(
-//!             cr,             // &mut OCamlRuntime
-//!             bytes1_root,    // OCamlRef<String>
-//!             // Immediate OCaml values, such as ints and books have an as_value_ref() method
-//!             // that can be used to simulate rooting.
-//!             &ocaml_first_n, // OCamlRef<OCamlInt>
-//!         );
+//!     // Perform the conversion of the OCaml result value into a
+//!     // Rust value while the reference is still valid because the
+//!     // call that follows will invalidate it.
+//!     // Alternatively, the result of `rootvar.keep(result1)` could be used
+//!     // to be able to reference the value later through an `OCamlRef` value.
+//!     let new_bytes1: String = result1.to_rust(cr);
+//!     let result2 = ocaml_funcs::increment_bytes(
+//!         cr,
+//!         &bytes2_root,
+//!         &ocaml_first_n,
+//!     );
 //!
-//!         // Perform the conversion of the OCaml result value into a
-//!         // Rust value while the reference is still valid because the
-//!         // call that follows will invalidate it.
-//!         // Alternatively, the result of `rootvar.keep(result1)` could be used
-//!         // to be able to reference the value later through an `OCamlRef` value.
-//!         let new_bytes1: String = result1.to_rust();
-//!         let result2 = ocaml_funcs::increment_bytes(
-//!             cr,
-//!             bytes2_root,
-//!             &ocaml_first_n,
-//!         );
-//!
-//!         // The `FromOCaml` trait provides the `from_ocaml` method to convert from
-//!         // OCaml values into OCaml values. Unlike the `to_ocaml` method, it doesn't
-//!         // require a GC handle argument, because no allocation is performed by the
-//!         // OCaml runtime when converting into Rust values.
-//!         // A more convenient alternative, is to use the `to_rust` method as
-//!         // above when `result1` was converted.
-//!         (new_bytes1, String::from_ocaml(result2))
-//!     })
+//!     (new_bytes1, result2.to_rust(cr))
 //! }
 //!
 //! fn twice(cr: &mut OCamlRuntime, num: usize) -> usize {
-//!     ocaml_frame!(cr, (num_root), {
-//!         let ocaml_num = unsafe { OCaml::of_i64_unchecked(num as i64) };
-//!         let num_root = num_root.keep(ocaml_num);
-//!         let result = ocaml_funcs::twice(cr, num_root);
-//!         i64::from_ocaml(result) as usize
-//!     })
+//!     let ocaml_num = unsafe { OCaml::of_i64_unchecked(num as i64) };
+//!     let result = ocaml_funcs::twice(cr, &ocaml_num);
+//!     result.to_rust::<i64>(cr) as usize
 //! }
 //!
 //! fn entry_point() {
@@ -293,7 +269,7 @@
 //!
 //! ```rust,no_run
 //! use ocaml_interop::{
-//!     to_ocaml, ocaml_export, ocaml_frame, FromOCaml, OCamlInt, OCaml, OCamlBytes,
+//!     ocaml_export, FromOCaml, OCamlInt, OCaml, OCamlBytes,
 //!     OCamlRef, ToOCaml,
 //! };
 //!
@@ -323,7 +299,7 @@
 //!             vec[i] += 1;
 //!         }
 //!
-//!         to_ocaml!(cr, vec)
+//!         vec.to_ocaml(cr)
 //!     }
 //! }
 //! ```
@@ -344,6 +320,7 @@
 //! - [caml-oxide](https://github.com/stedolan/caml-oxide), the code from that paper.
 //! - [ocaml-rs](https://github.com/zshipko/ocaml-rs), another OCaml<->Rust FFI library.
 
+mod boxroot;
 mod closure;
 mod conv;
 mod error;
@@ -353,7 +330,7 @@ mod mlvalues;
 mod runtime;
 mod value;
 
-pub mod boxroot;
+pub use crate::boxroot::BoxRoot;
 
 pub use crate::closure::{OCamlFn1, OCamlFn2, OCamlFn3, OCamlFn4, OCamlFn5};
 pub use crate::conv::{FromOCaml, ToOCaml};
@@ -368,9 +345,10 @@ pub use crate::value::OCaml;
 #[doc(hidden)]
 pub mod internal {
     pub use crate::closure::OCamlClosure;
-    pub use crate::memory::{caml_alloc, store_field, OCamlRawRoot};
+    pub use crate::memory::{caml_alloc, store_field};
     pub use crate::mlvalues::tag;
     pub use crate::mlvalues::UNIT;
+    pub use ocaml_boxroot_sys::{boxroot_setup, boxroot_teardown};
     pub use ocaml_sys::caml_hash_variant;
 
     // To bypass ocaml_sys::int_val unsafe declaration
@@ -383,5 +361,6 @@ pub mod internal {
 #[cfg(doctest)]
 pub mod compile_fail_tests;
 
+#[doc(hidden)]
 #[cfg(test)]
 mod compile_ok_tests;

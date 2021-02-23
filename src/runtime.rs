@@ -1,10 +1,11 @@
 // Copyright (c) SimpleStaking and Tezedge Contributors
 // SPDX-License-Identifier: MIT
 
+use ocaml_boxroot_sys::{boxroot_setup, boxroot_teardown};
 use ocaml_sys::{caml_shutdown, caml_startup};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Once};
 
-use crate::{memory::GCFrame, memory::OCamlRef, value::OCaml};
+use crate::{memory::OCamlRef, value::OCaml};
 
 /// OCaml runtime handle.
 pub struct OCamlRuntime {
@@ -14,15 +15,22 @@ pub struct OCamlRuntime {
 impl OCamlRuntime {
     /// Initializes the OCaml runtime and returns an OCaml runtime handle.
     pub fn init() -> Self {
-        OCamlRuntime::init_persistent();
-        OCamlRuntime { _private: () }
+        Self::init_persistent();
+        Self { _private: () }
     }
 
     /// Initializes the OCaml runtime.
     pub fn init_persistent() {
-        let arg0 = "ocaml\0".as_ptr() as *const i8;
-        let c_args = vec![arg0, core::ptr::null()];
-        unsafe { caml_startup(c_args.as_ptr()) }
+        static INIT: Once = Once::new();
+
+        INIT.call_once(|| {
+            let arg0 = "ocaml\0".as_ptr() as *const i8;
+            let c_args = vec![arg0, core::ptr::null()];
+            unsafe {
+                caml_startup(c_args.as_ptr());
+                boxroot_setup();
+            }
+        })
     }
 
     /// Recover the runtime handle.
@@ -47,11 +55,6 @@ impl OCamlRuntime {
         OCamlBlockingSection::new().perform(f)
     }
 
-    #[doc(hidden)]
-    pub fn open_frame<'a, 'gc>(&'a self) -> GCFrame<'gc> {
-        Default::default()
-    }
-
     /// Returns the OCaml valued to which this GC tracked reference points to.
     pub fn get<'tmp, T>(&'tmp self, reference: OCamlRef<T>) -> OCaml<'tmp, T> {
         OCaml {
@@ -63,7 +66,10 @@ impl OCamlRuntime {
 
 impl Drop for OCamlRuntime {
     fn drop(&mut self) {
-        unsafe { caml_shutdown() }
+        unsafe {
+            boxroot_teardown();
+            caml_shutdown();
+        }
     }
 }
 
@@ -87,4 +93,18 @@ impl Drop for OCamlBlockingSection {
     fn drop(&mut self) {
         unsafe { ocaml_sys::caml_leave_blocking_section() };
     }
+}
+
+// For initializing from an OCaml-drived program
+
+#[no_mangle]
+extern "C" fn ocaml_interop_setup(_unit: crate::RawOCaml) -> crate::RawOCaml {
+    unsafe { boxroot_setup() };
+    ocaml_sys::UNIT
+}
+
+#[no_mangle]
+extern "C" fn ocaml_interop_teardown(_unit: crate::RawOCaml) -> crate::RawOCaml {
+    unsafe { boxroot_teardown() };
+    ocaml_sys::UNIT
 }
