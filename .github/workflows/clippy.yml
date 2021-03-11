@@ -8,9 +8,27 @@ on:
 
 jobs:
   clippy:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        ocaml-version: ["4.09.1"]
     steps:
       - uses: actions/checkout@v2
+      - name: OCaml/Opam cache
+        id: ocaml-interop-opam-cache
+        uses: actions/cache@v2
+        with:
+          path: "~/.opam"
+          key: ${{ matrix.os }}-${{ matrix.ocaml-version }}
+      - name: Setup OCaml ${{ matrix.ocaml-version }}
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+      - name: Set Opam env
+        run: opam env >> $GITHUB_ENV
+      - name: Add Opam switch to PATH
+        run: opam var bin >> $GITHUB_PATH
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -22,6 +40,3 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features --features=without-ocamlopt
-        env:
-          OCAML_VERSION: 4.09.1
-          OCAML_WHERE_PATH: /ignored
