@@ -16,7 +16,7 @@ exclude = [
 features = [ "without-ocamlopt" ]
 
 [dependencies]
-ocaml-sys = "^0.19"
+ocaml-sys = "^0.20"
 ocaml-boxroot-sys = "0.1"
 static_assertions = "1.1.0"
 
