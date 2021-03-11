@@ -100,49 +100,9 @@ pub fn alloc_some<'a, 'b, A>(
     }
 }
 
-pub fn alloc_tuple<'a, 'b, F, S>(
-    cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<'b, F>,
-    snd: OCamlRef<'b, S>,
-) -> OCaml<'a, (F, S)> {
-    unsafe {
-        let ocaml_tuple = caml_alloc_tuple(2);
-        store_field(ocaml_tuple, 0, fst.get_raw());
-        store_field(ocaml_tuple, 1, snd.get_raw());
-        OCaml::new(cr, ocaml_tuple)
-    }
-}
-
-pub fn alloc_tuple_3<'a, 'b, F, S, T3>(
-    cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<'b, F>,
-    snd: OCamlRef<'b, S>,
-    elt3: OCamlRef<'b, T3>,
-) -> OCaml<'a, (F, S, T3)> {
-    unsafe {
-        let ocaml_tuple = caml_alloc_tuple(3);
-        store_field(ocaml_tuple, 0, fst.get_raw());
-        store_field(ocaml_tuple, 1, snd.get_raw());
-        store_field(ocaml_tuple, 2, elt3.get_raw());
-        OCaml::new(cr, ocaml_tuple)
-    }
-}
-
-pub fn alloc_tuple_4<'a, 'b, F, S, T3, T4>(
-    cr: &'a mut OCamlRuntime,
-    fst: OCamlRef<'b, F>,
-    snd: OCamlRef<'b, S>,
-    elt3: OCamlRef<'b, T3>,
-    elt4: OCamlRef<'b, T4>,
-) -> OCaml<'a, (F, S, T3, T4)> {
-    unsafe {
-        let ocaml_tuple = caml_alloc_tuple(4);
-        store_field(ocaml_tuple, 0, fst.get_raw());
-        store_field(ocaml_tuple, 1, snd.get_raw());
-        store_field(ocaml_tuple, 2, elt3.get_raw());
-        store_field(ocaml_tuple, 3, elt4.get_raw());
-        OCaml::new(cr, ocaml_tuple)
-    }
+pub unsafe fn alloc_tuple<T>(cr: &mut OCamlRuntime, size: usize) -> OCaml<T> {
+    let ocaml_tuple = caml_alloc_tuple(size);
+    OCaml::new(cr, ocaml_tuple)
 }
 
 pub fn alloc_cons<'a, 'b, A>(
