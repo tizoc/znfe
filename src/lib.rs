@@ -65,7 +65,7 @@
 //! # let arg1 = "arg1";
 //! # let cr = unsafe { &mut OCamlRuntime::recover_handle() };
 //! let escape = ocaml_frame!(cr, (arg1_root), {
-//!     let arg1 = arg1.to_ocaml_rooted(cr);
+//!     let arg1 = arg1.to_boxroot(cr);
 //!     let arg1_root = arg1_root.keep(arg1);
 //!     let result = ocaml_function(cr, arg1_root, /* ..., argN */);
 //!     let s: String = result.to_rust();
@@ -84,7 +84,7 @@
 //!    |  _____------___^
 //!    | |     |
 //!    | |     borrow later stored here
-//!    | |     let arg1 = arg1.to_ocaml_rooted(cr);
+//!    | |     let arg1 = arg1.to_boxroot(cr);
 //!    | |     let arg1_root = arg1_root.keep(arg1);
 //!    | |     let result = ocaml_function(cr, arg1_root, /* ..., argN */);
 //! ...  |
@@ -196,13 +196,13 @@
 //!     // is the block of code that will run inside that frame.
 //!     // The `ToOCaml` trait provides the `to_ocaml` method to convert Rust
 //!     // values into OCaml values.
-//!     let ocaml_bytes1: BoxRoot<String> = bytes1.to_ocaml_rooted(cr);
+//!     let ocaml_bytes1: BoxRoot<String> = bytes1.to_boxroot(cr);
 //!
 //!     // Same as above. Here the convenience macro [`to_ocaml!`] is used.
-//!     // It works like `value.to_ocaml_rooted(cr)`, but has an optional third argument that
+//!     // It works like `value.to_boxroot(cr)`, but has an optional third argument that
 //!     // can be a root variable to perform the rooting.
 //!     // This variation returns an `OCamlRef` value instead of an `OCaml` one.
-//!     let bytes2_root = bytes2.to_ocaml_rooted(cr);
+//!     let bytes2_root = bytes2.to_boxroot(cr);
 //!
 //!     // Rust `i64` integers can be converted into OCaml fixnums with `OCaml::of_i64`
 //!     // and `OCaml::of_i64_unchecked`.

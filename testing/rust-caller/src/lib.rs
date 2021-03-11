@@ -62,14 +62,14 @@ mod ocaml {
 }
 
 pub fn increment_bytes(cr: &mut OCamlRuntime, bytes: &str, first_n: usize) -> String {
-    let bytes = bytes.to_ocaml_rooted(cr);
+    let bytes = bytes.to_boxroot(cr);
     let first_n = unsafe { OCaml::of_i64_unchecked(first_n as i64) };
     let result = ocaml::increment_bytes(cr, &bytes, &first_n);
     result.to_rust(cr)
 }
 
 pub fn increment_ints_list(cr: &mut OCamlRuntime, ints: &Vec<i64>) -> Vec<i64> {
-    let ints = ints.to_ocaml_rooted(cr);
+    let ints = ints.to_boxroot(cr);
     let result = ocaml::increment_ints_list(cr, &ints);
     result.to_rust(cr)
 }
@@ -82,13 +82,13 @@ pub fn twice(cr: &mut OCamlRuntime, num: i64) -> i64 {
 
 pub fn make_tuple(cr: &mut OCamlRuntime, fst: String, snd: i64) -> (String, i64) {
     let num = unsafe { OCaml::of_i64_unchecked(snd) };
-    let str = fst.to_ocaml_rooted(cr);
+    let str = fst.to_boxroot(cr);
     let result = ocaml::make_tuple(cr, &str, &num);
     result.to_rust(cr)
 }
 
 pub fn make_some(cr: &mut OCamlRuntime, value: String) -> Option<String> {
-    let str = value.to_ocaml_rooted(cr);
+    let str = value.to_boxroot(cr);
     let result = ocaml::make_some(cr, &str);
     result.to_rust(cr)
 }
@@ -100,19 +100,19 @@ pub fn make_ok(cr: &mut OCamlRuntime, value: i64) -> Result<i64, String> {
 }
 
 pub fn make_error(cr: &mut OCamlRuntime, value: String) -> Result<i64, String> {
-    let result = value.to_ocaml_rooted(cr);
+    let result = value.to_boxroot(cr);
     let result = ocaml::make_error(cr, &result);
     result.to_rust(cr)
 }
 
 pub fn verify_record_test(cr: &mut OCamlRuntime, record: ocaml::TestRecord) -> String {
-    let ocaml_record = record.to_ocaml_rooted(cr);
+    let ocaml_record = record.to_boxroot(cr);
     let result = ocaml::stringify_record(cr, &ocaml_record);
     result.to_rust(cr)
 }
 
 pub fn verify_variant_test(cr: &mut OCamlRuntime, variant: ocaml::Movement) -> String {
-    let ocaml_variant = variant.to_ocaml_rooted(cr);
+    let ocaml_variant = variant.to_boxroot(cr);
     let result = ocaml::stringify_variant(cr, &ocaml_variant);
     result.to_rust(cr)
 }
@@ -248,7 +248,7 @@ fn test_exception_handling_with_message() {
     let result = std::panic::catch_unwind(move || {
         let mut cr = unsafe { OCamlRuntime::recover_handle() };
         let mcr = &mut cr;
-        let message = "my-error-message".to_ocaml_rooted(mcr);
+        let message = "my-error-message".to_boxroot(mcr);
         ocaml::raises_message_exception(mcr, &message);
     });
     assert_eq!(

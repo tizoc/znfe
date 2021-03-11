@@ -21,7 +21,7 @@ use crate::{
 /// Implements conversion from Rust values into OCaml values.
 pub unsafe trait ToOCaml<T> {
     /// Convert to OCaml value. Return an already rooted value as [`BoxRoot`]`<T>`.
-    fn to_ocaml_rooted(&self, cr: &mut OCamlRuntime) -> BoxRoot<T> {
+    fn to_boxroot(&self, cr: &mut OCamlRuntime) -> BoxRoot<T> {
         BoxRoot::new(self.to_ocaml(cr))
     }
 
@@ -135,7 +135,7 @@ where
 {
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, Option<OCamlA>> {
         if let Some(value) = self {
-            let ocaml_value = value.to_ocaml_rooted(cr);
+            let ocaml_value = value.to_boxroot(cr);
             alloc_some(cr, &ocaml_value)
         } else {
             unsafe { OCaml::new(cr, NONE) }
@@ -172,8 +172,8 @@ where
     B: ToOCaml<OCamlB>,
 {
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, (OCamlA, OCamlB)> {
-        let fst = self.0.to_ocaml_rooted(cr);
-        let snd = self.1.to_ocaml_rooted(cr);
+        let fst = self.0.to_boxroot(cr);
+        let snd = self.1.to_boxroot(cr);
         alloc_tuple(cr, &fst, &snd)
     }
 }
@@ -186,9 +186,9 @@ where
     C: ToOCaml<OCamlC>,
 {
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, (OCamlA, OCamlB, OCamlC)> {
-        let fst = self.0.to_ocaml_rooted(cr);
-        let snd = self.1.to_ocaml_rooted(cr);
-        let elt3 = self.2.to_ocaml_rooted(cr);
+        let fst = self.0.to_boxroot(cr);
+        let snd = self.1.to_boxroot(cr);
+        let elt3 = self.2.to_boxroot(cr);
         alloc_tuple_3(cr, &fst, &snd, &elt3)
     }
 }
@@ -205,10 +205,10 @@ where
         &self,
         cr: &'a mut OCamlRuntime,
     ) -> OCaml<'a, (OCamlA, OCamlB, OCamlC, OCamlD)> {
-        let fst = self.0.to_ocaml_rooted(cr);
-        let snd = self.1.to_ocaml_rooted(cr);
-        let elt3 = self.2.to_ocaml_rooted(cr);
-        let elt4 = self.3.to_ocaml_rooted(cr);
+        let fst = self.0.to_boxroot(cr);
+        let snd = self.1.to_boxroot(cr);
+        let elt3 = self.2.to_boxroot(cr);
+        let elt4 = self.3.to_boxroot(cr);
         alloc_tuple_4(cr, &fst, &snd, &elt3, &elt4)
     }
 }
@@ -229,7 +229,7 @@ where
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlList<OCamlA>> {
         let mut result = BoxRoot::new(OCaml::nil());
         for elt in self.iter().rev() {
-            let ov = elt.to_ocaml_rooted(cr);
+            let ov = elt.to_boxroot(cr);
             let cons = alloc_cons(cr, &ov, &result);
             result.keep(cons);
         }

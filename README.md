@@ -99,7 +99,7 @@ ocaml! {
 
 // ...
 
-let ocaml_string = "hello OCaml!".to_ocaml_rooted(cr);
+let ocaml_string = "hello OCaml!".to_boxroot(cr);
 ocaml_print_endline(cr, &ocaml_string);
 ```
 
