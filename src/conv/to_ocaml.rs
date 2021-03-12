@@ -71,7 +71,11 @@ unsafe impl ToOCaml<bool> for bool {
     }
 }
 
-// TODO: impl using Borrow trait instead?
+// TODO: figure out how to implement all this without so much duplication
+// it is not as simple as implementing for Borrow<str/[u8]> because
+// of the Box<T> implementation bellow, which causes a trait implementation
+// conflict.
+
 unsafe impl ToOCaml<String> for &str {
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, String> {
         alloc_string(cr, self)
