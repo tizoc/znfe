@@ -17,7 +17,7 @@ pub struct BoxRoot<T: 'static> {
 
 impl<T> BoxRoot<T> {
     /// Creates a new root from an [`OCaml`]`<T>` value.
-    pub fn new<'a>(val: OCaml<'a, T>) -> BoxRoot<T> {
+    pub fn new(val: OCaml<T>) -> BoxRoot<T> {
         BoxRoot {
             boxroot: unsafe { boxroot_create(val.raw) },
             _marker: PhantomData,

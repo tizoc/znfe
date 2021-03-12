@@ -104,11 +104,7 @@ where
     A: FromOCaml<OCamlA>,
 {
     fn from_ocaml(v: OCaml<Option<OCamlA>>) -> Self {
-        if let Some(value) = v.to_option() {
-            Some(A::from_ocaml(value))
-        } else {
-            None
-        }
+        v.to_option().map(A::from_ocaml)
     }
 }
 
