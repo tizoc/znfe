@@ -975,42 +975,6 @@ macro_rules! ocaml_unpack_polymorphic_variant {
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! repeat_slice {
-    (@expr $value:expr;
-     @accum [$($accum:expr),+];
-     @rest) => {
-         [$($accum),+]
-     };
-
-    (@expr $value:expr;
-     @accum [$($accum:expr),+];
-     @rest $_v1:ident $_v2:ident $_v3:ident $_v4:ident $_v5:ident $($vars:ident)*) => {
-        $crate::repeat_slice!(
-            @expr $value;
-            @accum [$value, $value, $value, $value, $value, $($accum),+];
-            @rest $($vars)*)
-    };
-
-    (@expr $value:expr;
-        @accum [$($accum:expr),+];
-        @rest $_v1:ident $($vars:ident)*) => {
-
-        $crate::repeat_slice!(
-            @expr $value;
-            @accum [$value, $($accum),+];
-            @rest $($vars)*)
-    };
-
-    ($value:expr, $field:ident $($vars:ident)*) => {
-        $crate::repeat_slice!(
-            @expr $value;
-            @accum [$value];
-            @rest $($vars)*)
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
 macro_rules! count_fields {
     () => {0usize};
     ($_f1:ident $_f2:ident $_f3:ident $_f4:ident $_f5:ident $($fields:ident)*) => {
@@ -1229,27 +1193,6 @@ macro_rules! ocaml_closure_reference {
             OC.unwrap_or_else(|| panic!("OCaml closure with name '{}' not registered", NAME))
         };
     };
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! gcmark_result {
-    ($cr:ident, $obj:expr) => {
-        match $obj {
-            Ok(t) => Ok(t.mark($cr).eval($cr)),
-            Err(e) => Err(e),
-        }
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! default_to_ocaml_unit {
-    // No return value, default to unit
-    () => ($crate::OCaml<()>);
-
-    // Return value specified
-    ($rtyp:ty) => ($rtyp);
 }
 
 #[doc(hidden)]
