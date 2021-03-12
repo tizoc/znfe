@@ -6,17 +6,19 @@ use crate::*;
 
 /// Declares OCaml functions.
 ///
-/// `ocaml! { pub fn ocaml_name(arg1: Typ1, ...) -> Ret_typ; ... }` declares a function that has been
-/// defined in OCaml code and registered with `Callback.register "ocaml_name" the_function`.
+/// `ocaml! { pub fn registered_name(arg1: ArgT, ...) -> Ret_typ; ... }` declares a function that has been
+/// defined in OCaml code and registered with `Callback.register "registered_name" ocaml_function`.
 ///
-/// Visibility and return value type can be omitted. The return type defaults to unit when omitted.
+/// Visibility and return value type can be omitted. The return type defaults to `()` when omitted.
 ///
-/// When invoking one of these functions, the first argument must be a `&mut OCamlRuntime`,
-/// and the remaining arguments `OCamlRef<ArgT>`.
+/// When invoking one of these functions, the first argument must be a `&mut `[`OCamlRuntime`],
+/// and the remaining arguments [`OCamlRef`]`<ArgT>`.
 ///
-/// The return value is a `BoxRoot<RetType>`.
+/// The return value is a [`BoxRoot`]`<RetType>`.
 ///
-/// Calls that raise an OCaml exception will `panic!`.
+/// Calls that raise an OCaml exception will `panic!`. Care must be taken on the OCaml side
+/// to avoid exceptions and return `('a, 'err) Result.t` values to signal errors, which
+/// can then be converted into Rust's `Result<A, Err>` and `Result<OCaml<A>, OCaml<Err>>`.
 ///
 /// # Examples
 ///
@@ -24,8 +26,8 @@ use crate::*;
 /// # use ocaml_interop::*;
 /// # struct MyRecord {};
 /// ocaml! {
-///     // Declares `print_endline`, with a single `String` (`OCaml<String>` when invoked)
-///     // argument and unit return type (default when omitted).
+///     // Declares `print_endline`, with a single `String` (`OCamlRef<String>` when invoked)
+///     // argument and `BoxRoot<()>` return type (default when omitted).
 ///     pub fn print_endline(s: String);
 ///
 ///     // Declares `bytes_concat`, with two arguments, an OCaml `bytes` separator,
@@ -103,11 +105,11 @@ macro_rules! ocaml {
 
 /// Defines Rust functions callable from OCaml.
 ///
-/// The first argument in these functions declarations is a name to bind a `&mut OCamlRuntme`.
+/// The first argument in these functions declarations is a name to bind a `&mut `[`OCamlRuntime`].
 ///
-/// Arguments and return values must be of type [`OCaml`]`<T>`, or `f64` in the case of unboxed floats.
+/// Arguments and return values must be of type [`OCamlRef`]`<T>`, or `f64` in the case of unboxed floats.
 ///
-/// The return type defaults to unit when omitted.
+/// The return type defaults to [`OCaml`]`<()>` when omitted.
 ///
 /// # Examples
 ///
@@ -275,7 +277,9 @@ macro_rules! impl_conv_ocaml_variant {
     };
 }
 
-/// Unpacks an OCaml record into a Rust record
+/// Unpacks an OCaml record into a Rust record.
+///
+/// This macro works on [`OCaml`]`<'gc, T>` values.
 ///
 /// It is important that the order of the fields remains the same as in the OCaml type declaration.
 ///
@@ -650,6 +654,8 @@ macro_rules! impl_from_ocaml_variant {
 }
 
 /// Unpacks an OCaml variant and maps it into a Rust enum.
+///
+/// This macro works on [`OCaml`]`<'gc, T>` values.
 ///
 /// It is important that the order of the fields remains the same as in the OCaml type declaration.
 ///
